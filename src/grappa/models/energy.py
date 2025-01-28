@@ -5,6 +5,7 @@ from grappa.utils.dgl_utils import grad_available
 from grappa.models.internal_coordinates import InternalCoordinates
 import copy
 
+
 def torsion_energy(k, angle, offset=True):
     """
     returns a tensor of shape tuples x confs containing the energy contributions of each torsion angle individually.
@@ -55,7 +56,21 @@ def harmonic_energy(k, eq, distances):
     energy = k.unsqueeze(dim=-1)*torch.square(distances-eq.unsqueeze(dim=-1))
     return 0.5 * energy
 
+def morse_energy(de, eq, a, distances):
+    """
+    returns a tensor of shape tuples x confs containing the energy contributions of each tuple (bond/angle) using the morse potential.
+    implements
+    
+    de * ( 1 - exp(a-(distances-eq)))^2
+    """ 
+    if len(de.shape) != 1 and len(eq.shape) != 1 and len(a.shape) != 1:
+        raise ValueError(f"de, eq and a must be a 1d tensors but has shapes de: {de.shape}, eq: {eq.shape} and a: {a.shape}")
+    pass
 
+    energy = torch.square((1-torch.exp(a.unsqueeze(dim=-1)-(distances-eq.unsqueeze(dim=-1)))))
+    return de.unsqueeze(dim=-1)*energy
+    
+    
 def pool_energy(g, energies, term, suffix):
     """
     Given a tensor of energy contributions of shape tuples x confs, returns a the energy pooled over the tuple dimension. this operation recognizes batched graphs.
@@ -142,7 +157,7 @@ class Energy(torch.nn.Module):
             # get the energy contribution of this term in shape (num_batch, num_confs)
 
             contrib, tuple_energies = Energy.get_energy_contribution(g, term=term, suffix=self.suffix, offset_torsion=self.offset_torsion)
-            if not contrib is None:
+            if contrib is not None:
                 if self.gradient_contributions and grad_available():
                     # condition under which we can calculate the gradient:
                     if contrib.shape[0] > 0 and not torch.all(contrib==0):
@@ -175,21 +190,37 @@ class Energy(torch.nn.Module):
         en, energies
         where en is the total energy contribution from this term and energies is a tensor of shape (num_tuples, num_confs) containing the energy contribution of each tuple individually.
         """
+        def check_availability(param):
+            if param+suffix not in g.nodes[term].data.keys():
+                raise RuntimeError(f"{term} has no {param}{suffix} attribute")
+    
         if term not in g.ntypes:
             return None, None
-        if "k"+suffix not in g.nodes[term].data.keys():
-            raise RuntimeError(f"{term} has no k{suffix} attribute")
+        
+        #
 
-        k = g.nodes[term].data["k"+suffix]
         dof_data = g.nodes[term].data["x"]
 
-        if term in ["n2", "n3"]:
+        if term in ["n2"]:
+            check_availability("de")
+            check_availability("eq")
+            check_availability("a")
+            de = g.nodes[term].data["de"+suffix]
+            eq = g.nodes[term].data["eq"+suffix]
+            a = g.nodes[term].data["a"+suffix]
+            energies = morse_energy(de=de, eq=eq, a=a, distances=dof_data)
+            
+        if term in ["n3"]:
+            check_availability("k")
+            k = g.nodes[term].data["k"+suffix]
             eq = g.nodes[term].data["eq"+suffix]
             energies = harmonic_energy(k=k, eq=eq, distances=dof_data)
-            en = pool_energy(g=g, energies=energies, term=term, suffix=suffix)
-  
+            
         if term in ["n4", "n4_improper"]:
+            check_availability("k")
+            k = g.nodes[term].data["k"+suffix]
             energies = torsion_energy(k=k,angle=dof_data, offset=offset_torsion)
-            en = pool_energy(g=g, energies=energies, term=term, suffix=suffix)
+            
+        en = pool_energy(g=g, energies=energies, term=term, suffix=suffix)
 
         return en, energies

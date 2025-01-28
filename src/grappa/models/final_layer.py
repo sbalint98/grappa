@@ -96,32 +96,3 @@ class ToRange(torch.nn.Module):
         output = self.max * sigmoid_x
         return output
     
-
-#%%
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-
-    std = torch.tensor([1.]).item()
-    model = ToRange(1, std, True)
-
-    x = torch.randn(100)
-    y = torch.abs(torch.randn(100))/4.
-
-    plt.scatter(x,y)
-    plt.scatter(x, model(x).detach())
-    # %%
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = torch.nn.MSELoss()
-
-    for i in range(100):
-        optimizer.zero_grad()
-        y_pred = model(x)
-        loss = loss_fn(y_pred, y)
-        loss.backward()
-        optimizer.step()
-        if i%10==0:
-            print(loss.item())
-    # %%
-    plt.scatter(x,y)
-    plt.scatter(x, model(x).detach())
-    # %%

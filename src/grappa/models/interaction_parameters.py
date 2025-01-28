@@ -64,7 +64,7 @@ class WriteParameters(torch.nn.Module):
             learnable_statistics=learnable_statistics,
             gate=harmonic_gate,
             shifted_elu=shifted_elu,
-            stat_scaling=stat_scaling
+            stat_scaling=False
         )
 
         # Initialize Angle Writer
@@ -222,9 +222,9 @@ class WriteBondParameters(torch.nn.Module):
         - a ToPositive layer that transforms the output of the SymmetrisedTransformer to positive values such that a normal distribution of symmetriser outputs would lead to a Gaussian distribution with mean param_statistics["mean"]["..."] and std param_statistics["std"]["..."]
     For initialization of the model weights, a param_statistics containing the expected mean and std deviation of the parameters can be given. Then the output of the symmetriser will be approximately a normal distribution with mean 0 and unit std deviation. This is optional, but recommended for achieving faster training convergence.
     """
-    def __init__(self, rep_feats, between_feats, suffix="", param_statistics=None, n_att=2, n_heads=8, dense_layers=2, dropout=0., layer_norm=True, symmetriser_feats=None, attention_hidden_feats=None, positional_encoding=True, learnable_statistics:bool=False, gate:bool=False, shifted_elu:bool=True, stat_scaling:bool=True):
+    def __init__(self, rep_feats, between_feats, suffix="", param_statistics=None, n_att=2, n_heads=8, dense_layers=2, dropout=0., layer_norm=True, symmetriser_feats=None, attention_hidden_feats=None, positional_encoding=True, learnable_statistics:bool=False, gate:bool=False, shifted_elu:bool=True, stat_scaling:bool=True, use_morse_pot:bool=True):
         super().__init__()
-
+        self.use_morse_pot=use_morse_pot
         # the minimum std deviation to which the output of the symmetriser is scaled
         EPSILON_STD = 1e-6
 
@@ -236,11 +236,21 @@ class WriteBondParameters(torch.nn.Module):
             k_std=param_statistics["std"]["n2_k"].item() + EPSILON_STD
             eq_mean=param_statistics["mean"]["n2_eq"].item()
             eq_std=param_statistics["std"]["n2_eq"].item() + EPSILON_STD
+            de_mean=1.
+            de_std=0.
+            a_mean=1.
+            a_std=0.
+            
         else:
-            k_mean=0.
-            k_std=1.
+            k_mean = 0.
+            k_std = 1.
             eq_mean=0.
             eq_std=1.
+            a_mean=0.
+            a_std=1.
+            de_mean=0.
+            de_std=1.
+            
 
         self.suffix = suffix
 
@@ -255,14 +265,24 @@ class WriteBondParameters(torch.nn.Module):
 
         self.gate = gate
 
-        self.bond_model = SymmetrisedTransformer(n_feats=between_feats, n_heads=n_heads, hidden_feats=attention_hidden_feats, n_layers=n_att, out_feats=2+int(gate), permutations=torch.tensor([[0,1],[1,0]], dtype=torch.int32), layer_norm=layer_norm, dropout=dropout, symmetriser_layers=dense_layers, symmetriser_hidden_feats=symmetriser_feats, positional_encoding=False)
+        if(self.use_morse_pot):
+            #de, eq, a 
+            num_out_features = 3+int(gate)
+        else:
+            num_out_features = 2+int(gate)
+        
+        self.bond_model = SymmetrisedTransformer(n_feats=between_feats, n_heads=n_heads, hidden_feats=attention_hidden_feats, n_layers=n_att, out_feats=num_out_features, permutations=torch.tensor([[0,1],[1,0]], dtype=torch.int32), layer_norm=layer_norm, dropout=dropout, symmetriser_layers=dense_layers, symmetriser_hidden_feats=symmetriser_feats, positional_encoding=False)
 
         if shifted_elu:
             self.to_k = ToPositive(mean=k_mean, std=k_std, min_=0, learnable_statistics=learnable_statistics)
             self.to_eq = ToPositive(mean=eq_mean, std=eq_std, learnable_statistics=learnable_statistics)
+            self.to_a = ToPositive(mean=a_mean, std=a_std, learnable_statistics=learnable_statistics)
+            self.to_de = ToPositive(mean=de_mean, std=de_std, learnable_statistics=learnable_statistics)
         else:
             self.to_k = Exponentiate()
             self.to_eq = Exponentiate()
+            self.to_a =  Exponentiate()
+            self.to_de =  Exponentiate()
 
 
     def forward(self, g):
@@ -272,23 +292,31 @@ class WriteBondParameters(torch.nn.Module):
         inputs = self.rep_projector(g)
 
         coeffs = self.bond_model(inputs)
-        
-        coeffs[:,0] = self.to_eq(coeffs[:,0])
-        coeffs[:,1] = self.to_k(coeffs[:,1])
+        if(self.use_morse_pot):
+            coeffs[:,0] = self.to_eq(coeffs[:,0])
+            coeffs[:,1] = self.to_de(coeffs[:,1])
+            coeffs[:,2] = self.to_a(coeffs[:,2])
+        else:
+            coeffs[:,0] = self.to_eq(coeffs[:,0])
+            coeffs[:,1] = self.to_k(coeffs[:,1])
 
-        k = coeffs[:,1]
+        # I am not sure what this does and how to implement it for the morse potential, maybe do it later
+        # k = coeffs[:,1]
 
-        if self.gate:
-            # multiply the output by a gate with possible values between 0 and 2, with mean 1 and std 1
-            # (for x to zero, sigmoid behaves like 1/2 + x/4 +O(x^2)), so this will go like 1 + x:
-            k_gate_value = 2 * (torch.sigmoid(2*coeffs[:,2]))
-            k = k * k_gate_value
-
-        g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
-        g.nodes["n2"].data["k"+self.suffix] = coeffs[:,1]
+        # if self.gate:
+        #     # multiply the output by a gate with possible values between 0 and 2, with mean 1 and std 1
+        #     # (for x to zero, sigmoid behaves like 1/2 + x/4 +O(x^2)), so this will go like 1 + x:
+        #     k_gate_value = 2 * (torch.sigmoid(2*coeffs[:,2]))
+        #     k = k * k_gate_value
+        if(self.use_morse_pot):
+            g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
+            g.nodes["n2"].data["a"+self.suffix] = coeffs[:,1]  
+            g.nodes["n2"].data["de"+self.suffix] = coeffs[:,2] 
+        else:
+            g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
+            g.nodes["n2"].data["k"+self.suffix] = coeffs[:,1]
 
         return g
-
 
 
 class WriteAngleParameters(torch.nn.Module):
@@ -330,7 +358,7 @@ class WriteAngleParameters(torch.nn.Module):
     def __init__(self, rep_feats, between_feats, suffix="", param_statistics=None, n_att=2, n_heads=8, dense_layers=2, dropout=0., layer_norm=True, symmetriser_feats=None, attention_hidden_feats=None, positional_encoding=True, learnable_statistics:bool=False, gate:bool=False, shifted_elu:bool=True, stat_scaling:bool=True):
         super().__init__()
 
-        # the minimum std dviation to which the output of the symmetriser is scaled
+        # the minimum std deviation to which the output of the symmetriser is scaled
         EPSILON_STD = 1e-6
 
         if stat_scaling:
