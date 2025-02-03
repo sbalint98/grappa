@@ -236,10 +236,10 @@ class WriteBondParameters(torch.nn.Module):
             k_std=param_statistics["std"]["n2_k"].item() + EPSILON_STD
             eq_mean=param_statistics["mean"]["n2_eq"].item()
             eq_std=param_statistics["std"]["n2_eq"].item() + EPSILON_STD
-            de_mean=1.
-            de_std=0.
-            a_mean=1.
-            a_std=0.
+            de_mean=param_statistics["mean"]["n2_de"].item()
+            de_std=param_statistics["std"]["n2_de"].item() + EPSILON_STD
+            a_mean=param_statistics["mean"]["n2_a"].item()
+            a_std=param_statistics["std"]["n2_a"].item() + EPSILON_STD
             
         else:
             k_mean = 0.

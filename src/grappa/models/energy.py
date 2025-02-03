@@ -67,7 +67,7 @@ def morse_energy(de, eq, a, distances):
         raise ValueError(f"de, eq and a must be a 1d tensors but has shapes de: {de.shape}, eq: {eq.shape} and a: {a.shape}")
     pass
 
-    energy = torch.square((1-torch.exp(a.unsqueeze(dim=-1)-(distances-eq.unsqueeze(dim=-1)))))
+    energy = torch.square((1-torch.exp(-a.unsqueeze(dim=-1)*(distances-eq.unsqueeze(dim=-1)))))
     return de.unsqueeze(dim=-1)*energy
     
     
