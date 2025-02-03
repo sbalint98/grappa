@@ -56,7 +56,7 @@ def harmonic_energy(k, eq, distances):
     energy = k.unsqueeze(dim=-1)*torch.square(distances-eq.unsqueeze(dim=-1))
     return 0.5 * energy
 
-def morse_energy(de, eq, a, distances):
+def morse_energy(de, eq, k, distances):
     """
     returns a tensor of shape tuples x confs containing the energy contributions of each tuple (bond/angle) using the morse potential.
     implements
@@ -66,7 +66,8 @@ def morse_energy(de, eq, a, distances):
     if len(de.shape) != 1 and len(eq.shape) != 1 and len(a.shape) != 1:
         raise ValueError(f"de, eq and a must be a 1d tensors but has shapes de: {de.shape}, eq: {eq.shape} and a: {a.shape}")
     pass
-
+    
+    a = torch.sqrt((k/(2*de)))
     energy = torch.square((1-torch.exp(-a.unsqueeze(dim=-1)*(distances-eq.unsqueeze(dim=-1)))))
     return de.unsqueeze(dim=-1)*energy
     
@@ -204,11 +205,11 @@ class Energy(torch.nn.Module):
         if term in ["n2"]:
             check_availability("de")
             check_availability("eq")
-            check_availability("a")
+            check_availability("k")
             de = g.nodes[term].data["de"+suffix]
             eq = g.nodes[term].data["eq"+suffix]
-            a = g.nodes[term].data["a"+suffix]
-            energies = morse_energy(de=de, eq=eq, a=a, distances=dof_data)
+            k = g.nodes[term].data["k"+suffix]
+            energies = morse_energy(de=de, eq=eq, k=k, distances=dof_data)
             
         if term in ["n3"]:
             check_availability("k")

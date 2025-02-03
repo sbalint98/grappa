@@ -295,7 +295,7 @@ class WriteBondParameters(torch.nn.Module):
         if(self.use_morse_pot):
             coeffs[:,0] = self.to_eq(coeffs[:,0])
             coeffs[:,1] = self.to_de(coeffs[:,1])
-            coeffs[:,2] = self.to_a(coeffs[:,2])
+            coeffs[:,2] = self.to_k(coeffs[:,2])
         else:
             coeffs[:,0] = self.to_eq(coeffs[:,0])
             coeffs[:,1] = self.to_k(coeffs[:,1])
@@ -311,7 +311,7 @@ class WriteBondParameters(torch.nn.Module):
         if(self.use_morse_pot):
             g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
             g.nodes["n2"].data["de"+self.suffix] = coeffs[:,1]
-            g.nodes["n2"].data["a"+self.suffix] = coeffs[:,2]
+            g.nodes["n2"].data["k"+self.suffix] = coeffs[:,2]
         else:
             g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
             g.nodes["n2"].data["k"+self.suffix] = coeffs[:,1]
