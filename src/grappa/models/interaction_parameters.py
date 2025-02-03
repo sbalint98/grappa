@@ -310,8 +310,8 @@ class WriteBondParameters(torch.nn.Module):
         #     k = k * k_gate_value
         if(self.use_morse_pot):
             g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
-            g.nodes["n2"].data["a"+self.suffix] = coeffs[:,1]  
-            g.nodes["n2"].data["de"+self.suffix] = coeffs[:,2] 
+            g.nodes["n2"].data["de"+self.suffix] = coeffs[:,1]
+            g.nodes["n2"].data["a"+self.suffix] = coeffs[:,2]
         else:
             g.nodes["n2"].data["eq"+self.suffix] = coeffs[:,0]
             g.nodes["n2"].data["k"+self.suffix] = coeffs[:,1]
