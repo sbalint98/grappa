@@ -32,3 +32,4 @@ harmonic_gate: false
 only_n2_improper: true
 stat_scaling: true
 shifted_elu: true
+use_morse_potential: false

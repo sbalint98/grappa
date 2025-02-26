@@ -18,7 +18,7 @@ from grappa.training.lightning_model import GrappaLightningModel
 from grappa.utils.training_utils import to_df
 from grappa.utils.run_utils import flatten_dict, unflatten_dict
 from grappa.utils.plotting import make_scatter_plots, compare_scatter_plots
-from grappa.models import GrappaModel, Energy
+from grappa.models import GrappaModel, Energy, MorseEnergy
 from grappa.utils.model_loading_utils import get_model_dir, get_published_csv_path, get_path_from_tag
 import pandas as pd
 import torch
@@ -107,7 +107,7 @@ class Experiment:
         # init the model and append an energy module to it, which implements the MM functional differentiably
         model = torch.nn.Sequential(
             GrappaModel(**model_cfg, param_statistics=param_statistics),
-            Energy(suffix='', **energy_cfg)
+            MorseEnergy(suffix='', **energy_cfg)
         )
 
         # wrap a lightning model around it (which handles the training procedure)

@@ -39,7 +39,8 @@ class WriteParameters(torch.nn.Module):
 
     The class initializes and holds four separate writers, each configured for their respective parameter type.
     """
-    def __init__(self, graph_node_features=256, symmetric_transformer_dropout=0, layer_norm=True, positional_encoding=True, bond_transformer_depth=2, bond_n_heads=8, bond_transformer_width=512, bond_symmetriser_depth=2, bond_symmetriser_width=256, angle_transformer_depth=2, angle_n_heads=8, angle_transformer_width=512, angle_symmetriser_depth=2, angle_symmetriser_width=256, proper_transformer_depth=2, proper_n_heads=8, proper_transformer_width=512, proper_symmetriser_depth=2, proper_symmetriser_width=256, improper_transformer_depth=2, improper_n_heads=8, improper_transformer_width=512, improper_symmetriser_depth=2, improper_symmetriser_width=256, n_periodicity_proper=6, n_periodicity_improper=3, gated_torsion:bool=False, suffix="", wrong_symmetry=False, learnable_statistics:bool=False, param_statistics:dict=get_default_statistics(), torsion_cutoff=1.e-4, harmonic_gate:bool=False, only_n2_improper=False, shifted_elu:bool=True, stat_scaling:bool=True):
+    def __init__(self, 
+                 graph_node_features=256, symmetric_transformer_dropout=0, layer_norm=True, positional_encoding=True, bond_transformer_depth=2, bond_n_heads=8, bond_transformer_width=512, bond_symmetriser_depth=2, bond_symmetriser_width=256, angle_transformer_depth=2, angle_n_heads=8, angle_transformer_width=512, angle_symmetriser_depth=2, angle_symmetriser_width=256, proper_transformer_depth=2, proper_n_heads=8, proper_transformer_width=512, proper_symmetriser_depth=2, proper_symmetriser_width=256, improper_transformer_depth=2, improper_n_heads=8, improper_transformer_width=512, improper_symmetriser_depth=2, improper_symmetriser_width=256, n_periodicity_proper=6, n_periodicity_improper=3, gated_torsion:bool=False, suffix="", wrong_symmetry=False, learnable_statistics:bool=False, param_statistics:dict=get_default_statistics(), torsion_cutoff=1.e-4, harmonic_gate:bool=False, only_n2_improper=False, shifted_elu:bool=True, stat_scaling:bool=True, use_morse_potential:bool=False):
         super().__init__()
 
         if param_statistics is not None:
@@ -64,7 +65,8 @@ class WriteParameters(torch.nn.Module):
             learnable_statistics=learnable_statistics,
             gate=harmonic_gate,
             shifted_elu=shifted_elu,
-            stat_scaling=False
+            stat_scaling=False,
+            use_morse_pot=use_morse_potential
         )
 
         # Initialize Angle Writer
@@ -272,17 +274,21 @@ class WriteBondParameters(torch.nn.Module):
             num_out_features = 2+int(gate)
         
         self.bond_model = SymmetrisedTransformer(n_feats=between_feats, n_heads=n_heads, hidden_feats=attention_hidden_feats, n_layers=n_att, out_feats=num_out_features, permutations=torch.tensor([[0,1],[1,0]], dtype=torch.int32), layer_norm=layer_norm, dropout=dropout, symmetriser_layers=dense_layers, symmetriser_hidden_feats=symmetriser_feats, positional_encoding=False)
-
         if shifted_elu:
             self.to_k = ToPositive(mean=k_mean, std=k_std, min_=0, learnable_statistics=learnable_statistics)
             self.to_eq = ToPositive(mean=eq_mean, std=eq_std, learnable_statistics=learnable_statistics)
-            self.to_a = ToPositive(mean=a_mean, std=a_std, learnable_statistics=learnable_statistics)
-            self.to_de = ToPositive(mean=de_mean, std=de_std, learnable_statistics=learnable_statistics)
         else:
             self.to_k = Exponentiate()
             self.to_eq = Exponentiate()
-            self.to_a =  Exponentiate()
-            self.to_de =  Exponentiate()
+
+        if self.use_morse_pot:
+            if shifted_elu:
+                self.to_a = ToPositive(mean=a_mean, std=a_std, learnable_statistics=learnable_statistics)
+                self.to_de = ToPositive(mean=de_mean, std=de_std, learnable_statistics=learnable_statistics)
+            else:
+                self.to_a =  Exponentiate()
+                self.to_de =  Exponentiate()
+            
 
 
     def forward(self, g):

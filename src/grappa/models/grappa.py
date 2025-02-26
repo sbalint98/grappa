@@ -36,7 +36,8 @@ class GrappaModel(torch.nn.Module):
                  harmonic_gate:bool=False,
                  only_n2_improper:bool=True,
                  stat_scaling:bool=True,
-                 shifted_elu:bool=True):
+                 shifted_elu:bool=True,
+                 use_morse_potential:bool=False):
         """
         Implements a grappa model which combines a Graph Neural Network (GNN) for feature extraction followed by a parameter prediction for bonds, angles, and torsions.
 
@@ -159,7 +160,8 @@ class GrappaModel(torch.nn.Module):
             harmonic_gate=harmonic_gate,
             only_n2_improper=only_n2_improper,
             stat_scaling=stat_scaling,
-            shifted_elu=shifted_elu
+            shifted_elu=shifted_elu,
+            use_morse_potential=use_morse_potential,
         )
 
         # field of view relates to attention layers and convolutions; + 3 to get dihedrals and ring membership (up to 6 membered rings, for larger rings this should be higher)

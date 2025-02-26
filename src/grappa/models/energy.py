@@ -88,7 +88,7 @@ def pool_energy(g, energies, term, suffix):
 
 
 class Energy(torch.nn.Module):
-    def __init__(self, terms:list=["bond", "angle", "torsion", "improper"], suffix:str="", offset_torsion:bool=False, write_suffix=None, gradients:bool=True, gradient_contributions:bool=False):
+    def __init__(self, terms:list=["bond", "angle", "torsion", "improper"], suffix:str="", offset_torsion:bool=False, write_suffix=None, gradients:bool=True, gradient_contributions:bool=False, use_morse_potential:bool=False):
         """
         Module that writes the energy of molecular conformations into a dgl graph. First, internal coordinates such as torsional angles, angles and distances are calculated, then their energy contributions are added and stored at g.nodes["g"].data["energy"] and g.nodes["g"].data["energy_"+term] for each term. The gradients of the total energy w.r.t. the xyz coordinates are calculated and stored at g.nodes["n1"].data["gradient"].
         
@@ -111,6 +111,7 @@ class Energy(torch.nn.Module):
         self.gradients = gradients
         self.gradient_contributions = gradient_contributions
         self.geom = InternalCoordinates()
+        self.use_morse_potential=use_morse_potential
         
         self.TERM_TO_LEVEL = {
             "bond": "n2",
@@ -156,8 +157,10 @@ class Energy(torch.nn.Module):
                 raise ValueError(f"term {term} not in g.ntypes")
 
             # get the energy contribution of this term in shape (num_batch, num_confs)
-
-            contrib, tuple_energies = Energy.get_energy_contribution(g, term=term, suffix=self.suffix, offset_torsion=self.offset_torsion)
+            if(self.use_morse_potential):
+                contrib, tuple_energies = MorseEnergy.get_energy_contribution(g, term=term, suffix=self.suffix, offset_torsion=self.offset_torsion)
+            else:
+                contrib, tuple_energies = Energy.get_energy_contribution(g, term=term, suffix=self.suffix, offset_torsion=self.offset_torsion)
             if contrib is not None:
                 if self.gradient_contributions and grad_available():
                     # condition under which we can calculate the gradient:
@@ -186,6 +189,54 @@ class Energy(torch.nn.Module):
     
     @staticmethod
     def get_energy_contribution(g, term, suffix, offset_torsion=True):
+        print("Calculating harmonic energy")
+        """
+        Returns:
+        en, energies
+        where en is the total energy contribution from this term and energies is a tensor of shape (num_tuples, num_confs) containing the energy contribution of each tuple individually.
+        """
+        def check_availability(param):
+            if param+suffix not in g.nodes[term].data.keys():
+                raise RuntimeError(f"{term} has no {param}{suffix} attribute")
+    
+        if term not in g.ntypes:
+            return None, None
+        
+        #
+
+        dof_data = g.nodes[term].data["x"]
+
+        if term in ["n2"]:
+            check_availability("eq")
+            check_availability("k")
+            eq = g.nodes[term].data["eq"+suffix]
+            k = g.nodes[term].data["k"+suffix]
+            energies = harmonic_energy(eq=eq, k=k, distances=dof_data)
+            
+        if term in ["n3"]:
+            check_availability("k")
+            k = g.nodes[term].data["k"+suffix]
+            eq = g.nodes[term].data["eq"+suffix]
+            energies = harmonic_energy(k=k, eq=eq, distances=dof_data)
+            
+        if term in ["n4", "n4_improper"]:
+            check_availability("k")
+            k = g.nodes[term].data["k"+suffix]
+            energies = torsion_energy(k=k,angle=dof_data, offset=offset_torsion)
+            
+        en = pool_energy(g=g, energies=energies, term=term, suffix=suffix)
+
+        return en, energies
+
+
+class MorseEnergy(Energy):
+    def __init__(self, *args, **kwargs):
+        print("From the constructor of Morse energy")
+        super().__init__(*args, **kwargs, use_morse_potential=True)
+    
+    @staticmethod
+    def get_energy_contribution(g, term, suffix, offset_torsion=True):
+        print("Calculating Morse energy")
         """
         Returns:
         en, energies
@@ -225,3 +276,4 @@ class Energy(torch.nn.Module):
         en = pool_energy(g=g, energies=energies, term=term, suffix=suffix)
 
         return en, energies
+    
