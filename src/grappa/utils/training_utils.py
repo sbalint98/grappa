@@ -7,6 +7,7 @@ import logging
 
 
 def get_model_from_checkpoint(ckpt: dict, model_config:dict, device: torch.device='cpu') -> GrappaModel:
+    print(model_config)
     model = GrappaModel(**model_config).to(device)
     state_dict = ckpt['state_dict']
     # grappa model wieghts are stored as model.0 (zeroth entry in torch.sequential and model entry of ckpt state dict):
